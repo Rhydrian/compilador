@@ -16,7 +16,8 @@ class Token:
 
 # Palavras reservadas em C
 palavras_reservadas = [
-    "int", "return", "void"
+    "int", "float", "char", "boolean", "void", "if", "else", "for", "while",
+    "scanf", "println", "return"
 ]
 
 def eh_palavra_reservada(valor):
@@ -29,7 +30,7 @@ def eh_identificador(valor):
     return bool(re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", valor)) and not eh_palavra_reservada(valor)
 
 def eh_simbolo_especial(valor):
-    return valor in "(){};," 
+    return valor in "()[]{};,"
 
 def analisar_lexico(entrada):
     """
@@ -51,6 +52,7 @@ def analisar_lexico(entrada):
         else:
             tokens.append(Token(TipoToken.DESCONHECIDO, token_str))
     return tokens
+
 
 # Analisador Sintático
 class AnalisadorSintatico:
@@ -341,6 +343,18 @@ def main():
             print("Tokens:")
             for token in tokens:
                 print(f"{token.tipo}: {token.valor}")
+
+            # Criação da tabela de símbolos
+            tabela_simbolos = {}
+            for token in tokens:
+                if token.tipo == TipoToken.IDENTIFICADOR:
+                    if token.valor not in tabela_simbolos:
+                        tabela_simbolos[token.valor] = len(tabela_simbolos) + 1
+
+            # Impressão da tabela de símbolos
+            print("\nTabela de Símbolos:")
+            for identificador, id in tabela_simbolos.items():
+                print(f"Identificador (ID {id}): {identificador}")
 
             print("\nIniciando análise sintática...")
             analisador = AnalisadorSintatico(tokens)
