@@ -6,8 +6,6 @@ class TipoToken:
     IDENTIFICADOR = "IDENTIFICADOR"
     TEXTO = "TEXTO"
     PALAVRA_RESERVADA = "PALAVRA_RESERVADA"
-    COMENTARIO = "COMENTARIO"
-    OPERADOR = "OPERADOR"
     SIMBOLO_ESPECIAL = "SIMBOLO_ESPECIAL"
     DESCONHECIDO = "DESCONHECIDO"
 
@@ -16,21 +14,10 @@ class Token:
         self.tipo = tipo
         self.valor = valor
 
-    def __repr__(self):
-        return f"Token({self.tipo}, {self.valor})"
-
-# Palavras reservadas
+# Palavras reservadas em C
 palavras_reservadas = [
-    "int", "float", "char", "boolean", "void", "if", "else", "for", "while",
-    "scanf", "println", "main", "return", "double", "struct", "switch", "case", "default", "break", "continue"
+    "int", "return", "void"
 ]
-
-# Tabela de símbolos
-tabela_simbolos = {}
-indice_tabela_simbolos = 0
-
-def imprimir_token(token):
-    print(f"{token.tipo}: {token.valor}")
 
 def eh_palavra_reservada(valor):
     return valor in palavras_reservadas
@@ -38,49 +25,31 @@ def eh_palavra_reservada(valor):
 def eh_numero_inteiro(valor):
     return valor.isdigit()
 
-def eh_numero_decimal(valor):
-    return bool(re.fullmatch(r"\d+\.\d+", valor))
-
 def eh_identificador(valor):
-    return bool(re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", valor))
-
-def eh_comentario(valor):
-    return valor.startswith("//")
-
-def eh_operador(valor):
-    operadores = {"=", "+", "-", "*", "/", "%", "&&", "||", "!", ">", "<", ">=", "<=", "!=", "=="}
-    return valor in operadores
+    return bool(re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", valor)) and not eh_palavra_reservada(valor)
 
 def eh_simbolo_especial(valor):
-    return valor in "()[]{};," 
+    return valor in "(){};," 
 
 def analisar_lexico(entrada):
-    global indice_tabela_simbolos
+    """
+    Realiza a análise léxica para identificar tokens no código.
+    """
     tokens = []
-    token_strings = re.findall(r'//.*|".*?"|\w+|[^\s\w]', entrada)
+    token_strings = re.findall(r'".*?"|\w+|[^\s\w]', entrada)
     for token_str in token_strings:
-        if eh_comentario(token_str):
-            token = Token(TipoToken.COMENTARIO, token_str)
-        elif eh_numero_decimal(token_str):
-            token = Token(TipoToken.NUM_DEC, token_str)
+        if eh_palavra_reservada(token_str):
+            tokens.append(Token(TipoToken.PALAVRA_RESERVADA, token_str))
         elif eh_numero_inteiro(token_str):
-            token = Token(TipoToken.NUM_INT, token_str)
-        elif eh_palavra_reservada(token_str):
-            token = Token(TipoToken.PALAVRA_RESERVADA, token_str)
+            tokens.append(Token(TipoToken.NUM_INT, token_str))
         elif eh_identificador(token_str):
-            token = Token(TipoToken.IDENTIFICADOR, token_str)
-            if token_str not in tabela_simbolos:
-                indice_tabela_simbolos += 1
-                tabela_simbolos[token_str] = indice_tabela_simbolos
+            tokens.append(Token(TipoToken.IDENTIFICADOR, token_str))
         elif token_str.startswith('"') and token_str.endswith('"'):
-            token = Token(TipoToken.TEXTO, token_str.strip('"'))
-        elif eh_operador(token_str):
-            token = Token(TipoToken.OPERADOR, token_str)
+            tokens.append(Token(TipoToken.TEXTO, token_str.strip('"')))
         elif eh_simbolo_especial(token_str):
-            token = Token(TipoToken.SIMBOLO_ESPECIAL, token_str)
+            tokens.append(Token(TipoToken.SIMBOLO_ESPECIAL, token_str))
         else:
-            token = Token(TipoToken.DESCONHECIDO, token_str)
-        tokens.append(token)
+            tokens.append(Token(TipoToken.DESCONHECIDO, token_str))
     return tokens
 
 # Analisador Sintático
@@ -89,62 +58,278 @@ class AnalisadorSintatico:
         self.tokens = tokens
         self.posicao = 0
 
-    def obter_token_atual(self):
+    def token_atual(self):
         return self.tokens[self.posicao] if self.posicao < len(self.tokens) else None
 
-    def consumir_token(self):
-        token = self.obter_token_atual()
+    def consumir(self):
+        token = self.token_atual()
         self.posicao += 1
         return token
 
-    def verificar_token(self, tipo):
-        token = self.obter_token_atual()
-        return token and token.tipo == tipo
+    def verificar(self, tipo, valor=None):
+        token = self.token_atual()
+        if not token:
+            return False
+        if token.tipo != tipo:
+            return False
+        if valor and token.valor != valor:
+            return False
+        return True
+
+    def erro(self, mensagem):
+        raise SyntaxError(f"Erro sintático: {mensagem} na posição {self.posicao}")
+
+    # Função para analisar um programa inteiro
+    def analisar_programa(self):
+        """
+        Programa → Declaracao*
+        """
+        while self.token_atual() is not None:
+            self.analisar_declaracao()
+
+    # Função para analisar uma declaração de função
+    def analisar_declaracao(self):
+        """
+        Declaração → DeclaracaoFuncao | EstruturaControle | Comentarios
+        """
+        if self.verificar(TipoToken.PALAVRA_RESERVADA, "int"):
+            self.analisar_declaracao_funcao()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "void"):
+            self.analisar_declaracao_funcao()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "if"):
+            self.analisar_estrutura_if()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "while"):
+            self.analisar_estrutura_while()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "for"):
+            self.analisar_estrutura_for()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "switch"):
+            self.analisar_estrutura_switch()
+        elif self.verificar(TipoToken.PALAVRA_RESERVADA, "case"):
+            self.analisar_estrutura_case()
+        else:
+            self.erro("Tipo de declaração desconhecido.")
+
+    # Analisador de declaração de função
+    def analisar_declaracao_funcao(self):
+        """
+        DeclaracaoFuncao → Tipo ID ( Parametros ) Bloco
+        """
+        tipo = self.consumir()  # Consome o tipo (ex. "int")
+        if not self.verificar(TipoToken.IDENTIFICADOR):
+            self.erro("Esperado identificador após o tipo.")
+        self.consumir()  # Consome o nome da função
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após nome da função.")
+        self.consumir()  # Consome '('
+        self.analisar_parametros()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após os parâmetros.")
+        self.consumir()  # Consome ')'
+        self.analisar_bloco()
+
+    # Função para analisar parâmetros de uma função
+    def analisar_parametros(self):
+        """
+        Parametros → Parametro* 
+        """
+        while not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.analisar_parametro()
+
+    def analisar_parametro(self):
+        """
+        Parametro → Tipo ID
+        """
+        if not self.verificar(TipoToken.PALAVRA_RESERVADA):
+            self.erro("Esperado tipo de dado para parâmetro.")
+        self.consumir()  # Consome o tipo
+        if not self.verificar(TipoToken.IDENTIFICADOR):
+            self.erro("Esperado identificador para o parâmetro.")
+        self.consumir()  # Consome o identificador
+
+    # Analisador de blocos de código
+    def analisar_bloco(self):
+        """
+        Bloco → { Declaracao* }
+        """
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "{"):
+            self.erro("Esperado '{' no início do bloco.")
+        self.consumir()  # Consome '{'
+        while not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "}"):
+            self.analisar_declaracao()
+        self.consumir()  # Consome '}'
+
+    # Estrutura de controle "if"
+    def analisar_estrutura_if(self):
+        """
+        EstruturaControle → if ( Expressao ) Bloco
+        """
+        self.consumir()  # Consome 'if'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'if'.")
+        self.consumir()  # Consome '('
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após expressão em 'if'.")
+        self.consumir()  # Consome ')'
+        self.analisar_bloco()
+
+    # Estrutura de controle "while"
+    def analisar_estrutura_while(self):
+        """
+        EstruturaControle → while ( Expressao ) Bloco
+        """
+        self.consumir()  # Consome 'while'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'while'.")
+        self.consumir()  # Consome '('
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após expressão em 'while'.")
+        self.consumir()  # Consome ')'
+        self.analisar_bloco()
+
+    # Estrutura de controle "for"
+    def analisar_estrutura_for(self):
+        """
+        EstruturaControle → for ( Expressao ; Expressao ; Expressao ) Bloco
+        """
+        self.consumir()  # Consome 'for'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'for'.")
+        self.consumir()  # Consome '('
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ";"):
+            self.erro("Esperado ';' após a expressão no 'for'.")
+        self.consumir()  # Consome ';'
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ";"):
+            self.erro("Esperado ';' após a expressão no 'for'.")
+        self.consumir()  # Consome ';'
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após expressões no 'for'.")
+        self.consumir()  # Consome ')'
+        self.analisar_bloco()
+
+    # Estrutura de controle "switch"
+    def analisar_estrutura_switch(self):
+        """
+        EstruturaControle → switch ( Expressao ) { CaseLista }
+        """
+        self.consumir()  # Consome 'switch'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'switch'.")
+        self.consumir()  # Consome '('
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após expressão no 'switch'.")
+        self.consumir()  # Consome ')'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "{"):
+            self.erro("Esperado '{' após 'switch'.")
+        self.consumir()  # Consome '{'
+        self.analisar_case_lista()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "}"):
+            self.erro("Esperado '}' após bloco 'switch'.")
+        self.consumir()  # Consome '}'
+
+    def analisar_case_lista(self):
+        """
+        CaseLista → CaseDecl* 
+        """
+        while self.verificar(TipoToken.PALAVRA_RESERVADA, "case"):
+            self.analisar_estrutura_case()
+
+    # Estrutura de controle "case"
+    def analisar_estrutura_case(self):
+        """
+        CaseDecl → case Expressao : Bloco
+        """
+        self.consumir()  # Consome 'case'
+        self.analisar_expressao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ":"):
+            self.erro("Esperado ':' após 'case'.")
+        self.consumir()  # Consome ':'
+        self.analisar_bloco()
+
+    # Analisador de expressões (simplificado para demonstração)
+    def analisar_expressao(self):
+        """
+        Expressao → IDENTIFICADOR | NUM_INT | NUM_DEC | TEXTO
+        """
+        token = self.token_atual()
+        if token.tipo not in {TipoToken.IDENTIFICADOR, TipoToken.NUM_INT, TipoToken.NUM_DEC, TipoToken.TEXTO}:
+            self.erro(f"Expressão inválida. Encontrado: {token.valor}")
+        self.consumir()
+
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.posicao = 0
+
+    def token_atual(self):
+        return self.tokens[self.posicao] if self.posicao < len(self.tokens) else None
+
+    def consumir(self):
+        token = self.token_atual()
+        self.posicao += 1
+        return token
+
+    def verificar(self, tipo, valor=None):
+        token = self.token_atual()
+        if not token:
+            return False
+        if token.tipo != tipo:
+            return False
+        if valor and token.valor != valor:
+            return False
+        return True
+
+    def erro(self, mensagem):
+        raise SyntaxError(f"Erro sintático: {mensagem} na posição {self.posicao}")
 
     def analisar_programa(self):
-        while self.obter_token_atual() is not None:
-            if not self.analisar_declaracao():
-                print(f"Erro de sintaxe: token inesperado {self.obter_token_atual()}")
-                break
+        """
+        Programa → int main() { ChamadaFuncao }
+        """
+        if not self.verificar(TipoToken.PALAVRA_RESERVADA, "int"):
+            self.erro("Esperado 'int' no início do programa.")
+        self.consumir()  # Consome 'int'
+        if not self.verificar(TipoToken.IDENTIFICADOR, "main"):
+            self.erro("Esperado 'main' após 'int'.")
+        self.consumir()  # Consome 'main'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'main'.")
+        self.consumir()  # Consome '('
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após '('.")
+        self.consumir()  # Consome ')'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "{"):
+            self.erro("Esperado '{' no início do bloco.")
+        self.consumir()  # Consome '{'
+        self.analisar_chamada_funcao()
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "}"):
+            self.erro("Esperado '}' no final do bloco.")
+        self.consumir()  # Consome '}'
 
-    def analisar_declaracao(self):
-        return (
-            self.analisar_declaracao_variavel() or
-            self.analisar_declaracao_funcao() or
-            self.analisar_estrutura_controle() or
-            self.analisar_comentario()
-        )
-
-    def analisar_declaracao_variavel(self):
-        if self.verificar_token(TipoToken.PALAVRA_RESERVADA):
-            tipo = self.consumir_token()
-            if self.verificar_token(TipoToken.IDENTIFICADOR):
-                self.consumir_token()
-                if self.verificar_token(TipoToken.OPERADOR):
-                    self.consumir_token()
-                    self.analisar_expressao()
-                if self.verificar_token(TipoToken.SIMBOLO_ESPECIAL):
-                    self.consumir_token()
-                    return True
-        return False
-
-    def analisar_declaracao_funcao(self):
-        # Exemplo simplificado
-        pass
-
-    def analisar_estrutura_controle(self):
-        # Exemplo simplificado
-        pass
-
-    def analisar_comentario(self):
-        if self.verificar_token(TipoToken.COMENTARIO):
-            self.consumir_token()
-            return True
-        return False
-
-    def analisar_expressao(self):
-        # Exemplo simplificado
-        pass
+    def analisar_chamada_funcao(self):
+        """
+        ChamadaFuncao → printf ( TEXTO ) ;
+        """
+        if not self.verificar(TipoToken.IDENTIFICADOR, "printf"):
+            self.erro("Esperado 'printf' para chamada de função.")
+        self.consumir()  # Consome 'printf'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, "("):
+            self.erro("Esperado '(' após 'printf'.")
+        self.consumir()  # Consome '('
+        if not self.verificar(TipoToken.TEXTO):
+            self.erro("Esperado string dentro de 'printf'.")
+        self.consumir()  # Consome o texto
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ")"):
+            self.erro("Esperado ')' após string.")
+        self.consumir()  # Consome ')'
+        if not self.verificar(TipoToken.SIMBOLO_ESPECIAL, ";"):
+            self.erro("Esperado ';' após 'printf'.")
+        self.consumir()  # Consome ';'
 
 def main():
     caminho_arquivo = input("Digite o caminho do arquivo com o código-fonte: ").strip()
@@ -153,21 +338,19 @@ def main():
             tokens = []
             for linha in arquivo:
                 tokens.extend(analisar_lexico(linha.strip()))
-            print("\nTokens:")
+            print("Tokens:")
             for token in tokens:
-                imprimir_token(token)
+                print(f"{token.tipo}: {token.valor}")
 
             print("\nIniciando análise sintática...")
             analisador = AnalisadorSintatico(tokens)
             analisador.analisar_programa()
+            print("Análise sintática concluída com sucesso!")
     except FileNotFoundError:
         print(f"Erro: O arquivo '{caminho_arquivo}' não foi encontrado.")
-        return
-    except IOError as e:
-        print(f"Erro ao abrir o arquivo: {e}")
-        return
+    except SyntaxError as e:
+        print(f"Erro durante a análise sintática: {e}")
 
-    imprimir_tabela_simbolos()
 
 if __name__ == "__main__":
     main()
